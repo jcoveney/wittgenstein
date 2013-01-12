@@ -173,6 +173,18 @@ case class PigTuple(schema:PigSchema) extends PigNested(schema:PigSchema) with P
 case class PigBag(schema:PigSchema) extends PigNested(schema:PigSchema) with PigFlattenable
 case class PigMap(schema:PigSchema) extends PigNested(schema:PigSchema)
 
-trait PigSchema //we want a good representation of a Schema
+
 
 //TODO the nested types should probably come with the types they depend on?
+
+trait PigSchema //we want a good representation of a Schema
+trait PigPrimitive extends PigSchema
+case class Relation(fields:List[PigSchema]) extends PigSchema
+case class MapSchema(name:String, values:List[PigSchema]) extends PigSchema
+case class TupleSchema(name:String, values:List[PigSchema]) extends PigSchema
+case class BagSchema(name:String) extends PigSchema
+case class Int() extends PigPrimitive
+case class Long() extends PigPrimitive
+case class Float() extends PigPrimitive
+case class Double() extends PigPrimitive
+case class
