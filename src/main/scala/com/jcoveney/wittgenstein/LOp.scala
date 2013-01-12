@@ -1,6 +1,7 @@
 package com.jcoveney.wittgenstein
 
 import javax.xml.crypto.dsig.Transform
+import org.joda.time.DateTime
 
 /**
  * Created with IntelliJ IDEA.
@@ -32,23 +33,23 @@ sealed case class Filter(prev:LOp, predicate:PigTransform[PigBoolean]) extends L
 case class ColSelector[A <: PigType](col:Int) extends PigTransform[A]
 
 case class RegexFilter(col:PigTransform[PigString], regex:String) extends PigTransform[PigBoolean]
-case class FilterFunc(override val col:PigTransform[PigTuple], override val func:UserFunc[PigBoolean]) extends Udf[PigBoolean](col, func)
+abstract class FilterFunc(col:PigTransform[PigTuple], func:UserFunc[PigBoolean]) extends Udf[PigBoolean](col, func)
 
 // These functions will not do coercion. That must be done before, via casts.
 
-sealed case class ComparisonFilter[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends PigTransform[PigBoolean]
-sealed case class FilterComposition(fp1:PigTransform[PigBoolean], fp2:PigTransform[PigBoolean]) extends PigTransform[PigBoolean]
+abstract class ComparisonFilter[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends PigTransform[PigBoolean]
+abstract class FilterComposition(fp1:PigTransform[PigBoolean], fp2:PigTransform[PigBoolean]) extends PigTransform[PigBoolean]
 
-case class EqualsComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
-case class NotEqualsComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
-case class LessThanComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
-case class LessThanEqualsComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
-case class GreaterThanComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
-case class GreaterThanEqualsComparison[A <: PigType](override val col1:PigTransform[A], override val col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class EqualsComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class NotEqualsComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class LessThanComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class LessThanEqualsComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class GreaterThanComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
+case class GreaterThanEqualsComparison[A <: PigType](col1:PigTransform[A], col2:PigTransform[A]) extends ComparisonFilter(col1, col2)
 
-case class AndFilterComp(override val fp1:PigTransform[PigBoolean], override val fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
-case class OrFilterComp(override val fp1:PigTransform[PigBoolean], override val fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
-case class NotFilterComp(override val fp1:PigTransform[PigBoolean], override val fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
+case class AndFilterComp(fp1:PigTransform[PigBoolean], fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
+case class OrFilterComp(fp1:PigTransform[PigBoolean], fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
+case class NotFilterComp(fp1:PigTransform[PigBoolean], fp2:PigTransform[PigBoolean]) extends FilterComposition(fp1, fp2)
 
 // In optimization, could strip out aliases, rearranges, etc except for the last step
 // Though this could potentially make debugging difficult? Though that's more at the PO level anyway... and they will still have the plan
@@ -57,7 +58,7 @@ case class Rearrange(prev:LOp, oldPositions:List[Int], newPositions:List[Int]) e
 // New columns are added at the end, so actions must be decomposed into renames, rearranges, etc
 case class AddColumn(prev:LOp, newCol:PigTransform[PigType]) extends LOp
 // GOAL. we want to be able to maintain a flatten, even through a tuple (DataBag not for now, though eventually!)
-case class Flatten(prev:LOp, col:ColSelector[PigNested]) extends LOp
+case class Flatten(prev:LOp, col:ColSelector[PigFlattenable]) extends LOp
 
 // The type must agree, so casts must be inserted beforehand
 case class Multiply[Num <: PigNumeric](col1:PigTransform[Num], col2:PigTransform[Num]) extends PigTransform[Num]
@@ -68,23 +69,24 @@ case class Subtract[Num <: PigNumeric](col1:PigTransform[Num], col2:PigTransform
 // A transform that lets us use Udfs etc
 
 //Group
-case class Group(prev:LOp, col:ColSelector) extends LOp
+case class Group(prev:LOp, col:PigTransform[PigKey]) extends LOp
 
 // Cogroup
-case class Cogroup[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+case class Cogroup[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends LOp
 
 // Join
-case class Join[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+abstract class Join[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends LOp
 // Should we turn these into configurations?
-case class ReplicatedJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
-case class SkewedJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
-case class MergeJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
+case class PlainJoin[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends Join(lop1,col1,lop2,col2)
+case class ReplicatedJoin[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends Join(lop1,col1,lop2,col2)
+case class SkewedJoin[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends Join(lop1,col1,lop2,col2)
+case class MergeJoin[A <: PigKey](lop1:LOp, col1:PigTransform[A], lop2:LOp, col2:PigTransform[A]) extends Join(lop1,col1,lop2,col2)
 
 //Distinct
 case class Distinct(lop:LOp) extends LOp
 
 //Cross
-case class Cross[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+case class Cross[A <: PigKey](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
 
 //Limit
 case class Limit(lop:LOp, amt:Int) extends LOp
@@ -107,12 +109,14 @@ case class StreamLO(lop:LOp) extends LOp
 
 // Need to check what arguments rank can have...
 //Rank
-case class RankLO(lop:LOp, col:ColSelector) extends LOp
+case class RankLO(lop:LOp, col:ColSelector[PigKey]) extends LOp
 
+// Need more info on the semantics of these
 //Cube
+case class CubeLO(lop:LOp, col:ColSelector[PigType]) extends LOp
 
 //Sort
-case class SortLO(lop:LOp, sortBy:List[(ColSelector,Boolean)]) extends LOp
+case class SortLO(lop:LOp, sortBy:List[(ColSelector[PigKey],Boolean)]) extends LOp
 
 // Nested foreach (this one will be a bitch err I mean fun)
 
@@ -132,11 +136,8 @@ trait PigTransform[ReturnT <: PigType] // All PigTransforms are implicitly from 
 // this assumes that PigType has a method like castTo or somesuch
 case class Cast[A <: PigType](col:PigTransform[PigType]) extends PigTransform[A]
 
-case class Udf[ReturnT](col:PigTransform[PigTuple], func:UserFunc[ReturnT]) extends PigTransform[ReturnT]
+case class Udf[ReturnT <: PigType](col:PigTransform[PigTuple], func:UserFunc[ReturnT]) extends PigTransform[ReturnT]
 case class MakeTuple(columns:List[PigTransform[PigType]]) extends PigTransform[PigTuple]
-
-//TODO we want to alter the type system so a cast, udf, and filter (which all represent functions) can be done anywhere. They are all the same thing.
-// Filters are just special in that they return Booleans
 
 trait PigFunction[A <: PigType,B <: PigType]
 trait UserFunc[ReturnT <: PigType] // this wraps eval funcs. Implicitly, all funcs are given tuples so tuple wrappings will have to be inserted
@@ -152,15 +153,26 @@ trait UserFunc[ReturnT <: PigType] // this wraps eval funcs. Implicitly, all fun
 
 // This should allow us to make it much easier to enforce convensions for converting between types
 // This needs to handle questions like "is a given cast legal" and "how do I physically cast" and so on
+
 trait PigType
-trait PigNumeric extends PigType
-trait PigInt extends PigNumeric
-trait PigLong extends PigNumeric
-trait PigFloat extends PigNumeric
-trait PigDouble extends PigNumeric
-trait PigBoolean extends PigType
-trait PigString extends PigType
-trait PigNested extends PigType
-trait PigTuple extends PigNested
-trait PigBag extends PigNested
-trait PigMap extends PigType
+trait PigKey extends PigType
+trait PigFlattenable extends PigType
+trait PigNumeric extends PigKey
+// We ideally want adding support for numeric types to be really easy
+case class PigInt(value:Int) extends PigNumeric
+case class PigLong(value:Long) extends PigNumeric
+case class PigFloat(value:Float) extends PigNumeric
+case class PigDouble(value:Double) extends PigNumeric
+case class PigBigInt(value:BigInt) extends PigNumeric
+case class PigBigDecimal(value:BigDecimal) extends PigNumeric
+case class PigDateTime(value:DateTime) extends PigKey
+case class PigBoolean(value:Boolean) extends PigKey
+case class PigString(value:String) extends PigKey
+abstract class PigNested(schema:PigSchema) extends PigType
+case class PigTuple(schema:PigSchema) extends PigNested(schema:PigSchema) with PigKey with PigFlattenable
+case class PigBag(schema:PigSchema) extends PigNested(schema:PigSchema) with PigFlattenable
+case class PigMap(schema:PigSchema) extends PigNested(schema:PigSchema)
+
+trait PigSchema //we want a good representation of a Schema
+
+//TODO the nested types should probably come with the types they depend on?
