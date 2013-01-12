@@ -68,11 +68,52 @@ case class Subtract[Num <: PigNumeric](col1:PigTransform[Num], col2:PigTransform
 // A transform that lets us use Udfs etc
 
 //Group
+case class Group(prev:LOp, col:ColSelector) extends LOp
 
 // Cogroup
-case class Cogroup()
+case class Cogroup[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+
 // Join
-case class Join()
+case class Join[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+// Should we turn these into configurations?
+case class ReplicatedJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
+case class SkewedJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
+case class MergeJoin[A](override val lop1:LOp, override val col1:ColSelector[A], override val lop2:LOp, override val col2:ColSelector[A]) extends Join(lop1,col1,lop2,col2)
+
+//Distinct
+case class Distinct(lop:LOp) extends LOp
+
+//Cross
+case class Cross[A](lop1:LOp, col1:ColSelector[A], lop2:LOp, col2:ColSelector[A]) extends LOp
+
+//Limit
+case class Limit(lop:LOp, amt:Int) extends LOp
+
+//TODO need a way to pass in the load and store func, or at least information on it
+//load
+case class Load() extends LOp
+
+//Store
+case class Store(lop:LOp) extends LOp
+
+//need to think about how to handle the one to many nature of a split...we can do what pig does and just turn a split into many filters, but that diminishes
+//future optimization
+
+// A split is just a chain of filters, for now
+
+//Stream
+// todo we need a way to specify all of the information related to Streaming that we need for it to work
+case class StreamLO(lop:LOp) extends LOp
+
+// Need to check what arguments rank can have...
+//Rank
+case class RankLO(lop:LOp, col:ColSelector) extends LOp
+
+//Cube
+
+//Sort
+case class SortLO(lop:LOp, sortBy:List[(ColSelector,Boolean)]) extends LOp
+
 // Nested foreach (this one will be a bitch err I mean fun)
 
 //TODO REMOVE
